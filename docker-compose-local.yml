@@ -40,6 +40,7 @@ services:
     build:
       context: .
       dockerfile: be/Dockerfile
+    init: true
     container_name: eryuk-server
     working_dir: /app/be
     env_file:
@@ -50,8 +51,8 @@ services:
     command: pnpm dev
     ports:
       - '4000:4000'
-      - '20000-22000:20000-22000/udp'
-      - '20000-22000:20000-22000/tcp'
+      - '20000-20010:20000-20010/udp'
+      - '20000-20010:20000-20010/tcp'
     volumes:
       - ./be:/app/be:cached # 소스만 부분 바인드
       - /app/be/node_modules # 컨테이너 내 설치본 유지 (호스트 node_modules 가림 방지)
