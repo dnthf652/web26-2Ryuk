@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { roomStore, RoomStore } from '@/app/features/room/stores/room';
 import roomService from '@/app/features/room/services/RoomService';
 import { RoomConverter } from '@/app/features/room/dtos/converter';
@@ -24,6 +24,7 @@ export interface UseRoomResult {
   handlePasswordConfirm: (password: string) => Promise<void>;
   handlePasswordCancel: () => void;
   handleGameRecruitClick: () => Promise<void>;
+  handleReadyChange: (isReady: boolean) => Promise<void>;
   handleLeaveGame: () => Promise<void>;
   handleCloseGame: () => Promise<void>;
 }
@@ -43,17 +44,15 @@ export function useRoom(roomId: string): UseRoomResult {
     isGameRecruiting,
     isReadyModalOpen,
     handleGameRecruitClick,
+    handleReadyChange,
     handleLeaveGame,
     handleCloseGame,
     myStatus,
     gamePlayers,
   } = useGame(roomId, isHost);
 
-  const hasInitialized = useRef(false);
-
   useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
+    if (!roomId || !userId) return;
 
     const syncFromBe = async () => {
       if (!userId) {
@@ -102,7 +101,7 @@ export function useRoom(roomId: string): UseRoomResult {
     syncFromBe();
 
     return () => unsubInvalidated();
-  }, [roomId, userId, goHome, showSuccessToast, showErrorToast]);
+  }, [roomId, userId, showSuccessToast, showErrorToast]);
 
   const handlePasswordConfirm = useCallback(
     async (password: string) => {
@@ -145,6 +144,7 @@ export function useRoom(roomId: string): UseRoomResult {
     handlePasswordConfirm,
     handlePasswordCancel,
     handleGameRecruitClick,
+    handleReadyChange,
     handleLeaveGame,
     handleCloseGame,
   };

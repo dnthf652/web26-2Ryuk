@@ -45,7 +45,7 @@ export class RoomChatService {
     if (this.isSubscribed && !isMyRoom) await this.unsubscribe();
 
     // 동일 대화방 소속 중
-    if (this.isSubscribed && isMyRoom && isConnected) return this.registerEventHandlers();
+    if (this.isSubscribed && isMyRoom && isConnected) return;
 
     try {
       // GlobalChatService를 통해 연결 보장
@@ -204,7 +204,7 @@ export class RoomChatService {
     if (!dto.sender) return;
 
     const chatData = ChatConverter.toReceiveData(dto);
-    this.messages.push(chatData);
+    this.messages = [...this.messages, chatData];
     this.notifyMessage(chatData);
   }
 
@@ -289,7 +289,7 @@ export class RoomChatService {
     const ackData = ChatConverter.toRoomSendAckData(ackDto);
 
     // 변환된 Data를 로직에서 사용
-    this.messages.push(ackData);
+    this.messages = [...this.messages, ackData];
     this.notifyMessage(ackData);
   }
 

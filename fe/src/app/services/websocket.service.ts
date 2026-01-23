@@ -92,6 +92,10 @@ export class WebSocketService {
     this.connectResolvers.clear();
   }
 
+  static onReconnect(cb: () => void) {
+    this.on('connect', cb);
+  }
+
   /**
    * WebSocket 연결 완료 보장
    * @param timeout 타임아웃 (ms), 기본값 10초

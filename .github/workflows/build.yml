@@ -105,30 +105,38 @@ jobs:
 
       # 7) Build & Push Frontend Image
       - name: Build & Push Frontend Image
-        if: steps.bump.outputs.tag != ''      # ← merge commit일 때만 실행
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_API_SERVER_URL: ${{ secrets.NEXT_PUBLIC_API_SERVER_URL }}
         run: |
           VERSION=${{ steps.bump.outputs.tag }}
+          if [ -z "$VERSION" ]; then
+            VERSION=latest
+          fi
+      
           echo "🌐 Building Frontend Image: $VERSION"
-
+      
           docker build \
+            --no-cache \
+            --build-arg BUILD_TIME=$(date +%s) \
             --build-arg NODE_ENV=production \
             --build-arg VERSION=$VERSION \
-            --build-arg NEXT_PUBLIC_API_URL= \
-            --cache-from=type=registry,ref=$DOCKER_USERNAME/$IMAGE_NAME_FRONTEND:latest \
-            --cache-to=type=inline \
+            --build-arg NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+            --build-arg NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+            --build-arg NEXT_PUBLIC_API_SERVER_URL=$NEXT_PUBLIC_API_SERVER_URL \
             -t $DOCKER_USERNAME/$IMAGE_NAME_FRONTEND:$VERSION \
             -t $DOCKER_USERNAME/$IMAGE_NAME_FRONTEND:latest \
             -f fe/Dockerfile.prod \
             .
-
+      
           docker push $DOCKER_USERNAME/$IMAGE_NAME_FRONTEND:$VERSION
           docker push $DOCKER_USERNAME/$IMAGE_NAME_FRONTEND:latest
 
       # 8) Build Result
       - name: Notify build success
-        if: steps.bump.outputs.tag != '' && success()
+        if: success()
         run: |
           echo "✅ Build & Push Success"
-          echo "Tag created: ${{ steps.bump.outputs.tag }}"
           echo "Backend: $DOCKER_USERNAME/$IMAGE_NAME_BACKEND"
           echo "Frontend: $DOCKER_USERNAME/$IMAGE_NAME_FRONTEND"

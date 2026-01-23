@@ -12,6 +12,10 @@ import {
   GamePlayerRecruitData,
   GameLeaveData,
   GameCloseData,
+  GameReadyData,
+  GameUnreadyData,
+  GamePlayerReadyData,
+  GamePlayerUnreadyData,
 } from '@/app/features/game/dtos/data';
 import {
   GameJoinAckDto,
@@ -24,11 +28,17 @@ import {
   GamePlayerRecruitDto,
   GameLeaveDto,
   GameCloseDto,
+  GameReadyDto,
+  GameUnreadyDto,
+  GamePlayerReadyDto,
+  GamePlayerUnreadyDto,
 } from '@/app/features/game/dtos/dto';
 
 type PlayerJoinCallback = (data: GamePlayerJoinData) => void;
 type PlayerLeaveCallback = (data: GamePlayerLeaveData) => void;
 type RecruitCallback = (data: GamePlayerRecruitData) => void;
+type ReadyCallback = (data: GamePlayerReadyData) => void;
+type UnreadyCallback = (data: GamePlayerUnreadyData) => void;
 type CloseCallback = (data: GamePlayerCloseData) => void;
 
 /**
@@ -42,9 +52,17 @@ class GameService {
   private playerJoinCallbacks: Set<PlayerJoinCallback> = new Set();
   private playerLeaveCallbacks: Set<PlayerLeaveCallback> = new Set();
   private recruitCallbacks: Set<RecruitCallback> = new Set();
+  private playerReadyCallbacks: Set<ReadyCallback> = new Set();
+  private playerUnreadyCallbacks: Set<UnreadyCallback> = new Set();
   private closeCallbacks: Set<CloseCallback> = new Set();
-  private eventHandlers: Map<string, (...args: any[]) => void> = new Map();
   private handlersRegistered = false;
+
+  constructor() {
+    WebSocketService.onReconnect(() => {
+      this.handlersRegistered = false;
+      this.registerEventHandlers();
+    });
+  }
 
   /**
    * 게임 참가 요청
@@ -69,10 +87,6 @@ class GameService {
     this.registerEventHandlers();
     return () => this.playerJoinCallbacks.delete(callback);
   }
-
-  /* ==============================
-   * 게임 모집 흐름
-   * ============================== */
 
   /**
    * 게임 모집 시작 요청
@@ -102,10 +116,6 @@ class GameService {
     return () => this.recruitCallbacks.delete(callback);
   }
 
-  /* ==============================
-   * 게임 상태 변경
-   * ============================== */
-
   /**
    * 플레이어 퇴장 브로드캐스트 구독
    */
@@ -129,9 +139,35 @@ class GameService {
     WebSocketService.send(WS_EVENTS.GAME_LEAVE, dto);
   }
 
-  /* ==============================
-   * 게임 종료 흐름
-   * ============================== */
+  async ready(roomId: string): Promise<void> {
+    await WebSocketService.ensureConnected();
+
+    const data: GameReadyData = { roomId };
+    const dto: GameReadyDto = GameConverter.toGameReadyDto(data);
+
+    WebSocketService.send(WS_EVENTS.GAME_READY, dto);
+  }
+
+  onReady(callback: ReadyCallback): () => void {
+    this.playerReadyCallbacks.add(callback);
+    this.registerEventHandlers();
+    return () => this.playerReadyCallbacks.delete(callback);
+  }
+
+  async unready(roomId: string): Promise<void> {
+    await WebSocketService.ensureConnected();
+
+    const data: GameUnreadyData = { roomId };
+    const dto: GameUnreadyDto = GameConverter.toGameUnreadyDto(data);
+
+    WebSocketService.send(WS_EVENTS.GAME_UNREADY, dto);
+  }
+
+  onUnready(callback: UnreadyCallback): () => void {
+    this.playerUnreadyCallbacks.add(callback);
+    this.registerEventHandlers();
+    return () => this.playerUnreadyCallbacks.delete(callback);
+  }
 
   /**
    * 게임 모집 종료 요청
@@ -154,10 +190,6 @@ class GameService {
     this.registerEventHandlers();
     return () => this.closeCallbacks.delete(callback);
   }
-
-  /* ==============================
-   * 내부 이벤트 핸들러 등록
-   * ============================== */
 
   /**
    * WebSocket 브로드캐스트 이벤트 핸들러 등록
@@ -182,6 +214,16 @@ class GameService {
       this.recruitCallbacks.forEach((cb) => cb(data));
     };
 
+    const readyHandler = (dto: GamePlayerReadyDto) => {
+      const data = GameConverter.toGamePlayerReadyData(dto);
+      this.playerReadyCallbacks.forEach((cb) => cb(data));
+    };
+
+    const unreadyHandler = (dto: GamePlayerUnreadyDto) => {
+      const data = GameConverter.toGamePlayerUnreadyData(dto);
+      this.playerUnreadyCallbacks.forEach((cb) => cb(data));
+    };
+
     const closeHandler = (dto: GamePlayerCloseDto) => {
       const data = GameConverter.toGamePlayerCloseData(dto);
       this.closeCallbacks.forEach((cb) => cb(data));
@@ -190,6 +232,8 @@ class GameService {
     WebSocketService.on(WS_EVENTS.GAME_PLAYER_JOIN, playerJoinHandler);
     WebSocketService.on(WS_EVENTS.GAME_PLAYER_LEAVE, playerLeaveHandler);
     WebSocketService.on(WS_EVENTS.GAME_PLAYER_RECRUIT, recruitHandler);
+    WebSocketService.on(WS_EVENTS.GAME_PLAYER_READY, readyHandler);
+    WebSocketService.on(WS_EVENTS.GAME_PLAYER_UNREADY, unreadyHandler);
     WebSocketService.on(WS_EVENTS.GAME_PLAYER_CLOSE, closeHandler);
   }
 }

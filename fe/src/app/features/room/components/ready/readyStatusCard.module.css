@@ -8,6 +8,7 @@
   background: var(--neutral-2);
   border: var(--neutral-4) 1px solid;
   border-radius: 52px;
+  transition: all .2s ease-in-out;
 }
 
 .myCard.isHost {
@@ -43,6 +44,7 @@
   border-radius: 8px;
   background: var(--neutral-2);
   border: 1px solid var(--neutral-4);
+  transition: all .2s ease-in-out;
 }
 
 .otherCard.isHost {

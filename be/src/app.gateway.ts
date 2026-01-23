@@ -179,7 +179,7 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const pattern = `room:${localRoomId}:game:players:*`;
       const keys = await this.redisClient.keys(pattern);
 
-      if (keys.length == 1) await this.redisClient.del(`room:${localRoomId}:game`);
+      if (keys.length === 0) await this.redisClient.del(`room:${localRoomId}:game`);
     }
 
     // 기존 타이머가 있으면 취소

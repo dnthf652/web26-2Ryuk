@@ -30,8 +30,7 @@ export function useGame(roomId: string, isHost: boolean) {
     const recruiting = Boolean(roomData?.isGameRecruiting);
     setIsGameRecruiting(recruiting);
     if (recruiting && isHost && !isReadyModalOpen) {
-      modalStore.getState().openModal('game-ready');
-      setIsReadyModalOpen(true);
+      handleGameRecruitClick();
     }
   }, [roomData?.isGameRecruiting, isHost, isReadyModalOpen]);
 
@@ -56,7 +55,6 @@ export function useGame(roomId: string, isHost: boolean) {
     setMyStatus(me);
 
     if (roomData.isGameRecruiting && isHost && !isReadyModalOpen) {
-      modalStore.getState().openModal('game-ready');
       setIsReadyModalOpen(true);
     }
   }, [roomData?.players, roomData?.isGameRecruiting, userId, isHost, isReadyModalOpen]);
@@ -67,7 +65,7 @@ export function useGame(roomId: string, isHost: boolean) {
       if (data.isGameRecruiting) {
         if (!isHost) showInfoToast('게임 모집이 시작되었습니다.');
         else {
-          modalStore.getState().openModal('game-ready');
+          openReadyModal();
           setIsReadyModalOpen(true);
         }
       }
@@ -119,7 +117,7 @@ export function useGame(roomId: string, isHost: boolean) {
         applyJoinAck(ack);
         setIsGameRecruiting(true);
         showSuccessToast('게임 모집을 시작했습니다.');
-        modalStore.getState().openModal('game-ready');
+        openReadyModal();
         setIsReadyModalOpen(true);
         return;
       }
@@ -132,12 +130,16 @@ export function useGame(roomId: string, isHost: boolean) {
       const ack = await gameService.join(roomId);
       applyJoinAck(ack);
       showSuccessToast('게임 모집에 참여했습니다.');
-      modalStore.getState().openModal('game-ready');
+      openReadyModal();
       setIsReadyModalOpen(true);
     } catch {
       showErrorToast('게임 요청에 실패했습니다.');
     }
   }, [roomId, isHost, isGameRecruiting, showErrorToast, showSuccessToast, applyJoinAck]);
+
+  const openReadyModal = useCallback(() => {
+    modalStore.getState().openModal('game-ready');
+  }, []);
 
   const closeReadyModal = useCallback(() => {
     modalStore.getState().closeModal('game-ready');
@@ -152,6 +154,43 @@ export function useGame(roomId: string, isHost: boolean) {
     });
     return () => unsubscribeLeave();
   }, [closeReadyModal, userId]);
+
+  const handleReadyChange = useCallback(
+    async (isReady: boolean) => {
+      if (!roomId || !userId) return;
+      if (isReady) gameService.ready(roomId);
+      else gameService.unready(roomId);
+      setMyStatus((prev) => {
+        if (!prev) return prev;
+        return { ...prev, isReady };
+      });
+    },
+    [roomId, userId, closeReadyModal, showErrorToast, setMyStatus],
+  );
+
+  const updateReadyState = useCallback((playerId: string, isReady: boolean) => {
+    setGamePlayers((prev) => prev.map((p) => (p.userId === playerId ? { ...p, isReady } : p)));
+
+    setMyStatus((prev) => {
+      if (!prev) return prev;
+      if (prev.userId !== playerId) return prev;
+      return { ...prev, isReady };
+    });
+  }, []);
+
+  useEffect(() => {
+    const unsubscribeReady = gameService.onReady((data) => {
+      updateReadyState(data.playerId, data.isReady);
+    });
+    return () => unsubscribeReady();
+  }, [updateReadyState]);
+
+  useEffect(() => {
+    const unsubscribeUnready = gameService.onUnready((data) => {
+      updateReadyState(data.playerId, data.isReady);
+    });
+    return () => unsubscribeUnready();
+  }, [updateReadyState]);
 
   const handleLeaveGame = useCallback(async () => {
     if (!roomId || !userId) return;
@@ -194,9 +233,9 @@ export function useGame(roomId: string, isHost: boolean) {
     isGameRecruiting,
     isReadyModalOpen,
     handleGameRecruitClick,
-    closeReadyModal,
     myStatus,
     gamePlayers,
+    handleReadyChange,
     handleLeaveGame,
     handleCloseGame,
   };

@@ -30,6 +30,7 @@ export default function RoomPage() {
     handlePasswordConfirm,
     handlePasswordCancel,
     handleGameRecruitClick,
+    handleReadyChange,
     handleLeaveGame,
     handleCloseGame,
     myStatus,
@@ -74,6 +75,7 @@ export default function RoomPage() {
 
       <Modal
         id="game-ready"
+        key={roomId}
         closeOnBackdropClick={false}
         showCloseButton
         onClose={isHost ? handleCloseGame : handleLeaveGame}
@@ -84,7 +86,7 @@ export default function RoomPage() {
           maxPlayers={roomData?.maxParticipants}
           selectedGame={undefined}
           onChangeGame={() => {}}
-          onReadyChange={() => {}}
+          onReadyChange={handleReadyChange}
           onStart={() => {}}
         />
       </Modal>
