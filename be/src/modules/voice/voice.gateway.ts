@@ -1,24 +1,24 @@
-import { SubscribeMessage, WebSocketGateway, MessageBody, ConnectedSocket } from '@nestjs/websockets';
-import { VoiceService } from './voice.service';
-import { UseFilters, UsePipes, ValidationPipe, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
 import { WsExceptionFilter } from '@src/common/filters/ws-exception.filter';
 import { WsJsonParsePipe } from '@src/common/pipes/ws-json-parse.pipe';
-import {
-  GetRouterRtpCapabilitiesDto,
-  VoiceTransportCreateDto,
-  VoiceTransportConnectDto,
-  VoiceTransportCloseDto,
-  CreateProducerDto,
-  ProducerStateChangeDto,
-  GetProducersDto,
-  CreateConsumerDto,
-  ConsumerStateChangeDto,
-  LeaveVoiceRoomDto,
-} from './dto/voice.dto';
-import { Socket } from 'socket.io';
-import { RoomService } from '../room/room.service';
-import { AuthService } from '../auth/auth.service';
 import { createWsErrorResponse } from '@src/common/utils/ws-error-code';
+import { Socket } from 'socket.io';
+import { AuthService } from '../auth/auth.service';
+import { RoomService } from '../room/room.service';
+import {
+  ConsumerStateChangeDto,
+  CreateConsumerDto,
+  CreateProducerDto,
+  GetProducersDto,
+  GetRouterRtpCapabilitiesDto,
+  LeaveVoiceRoomDto,
+  ProducerStateChangeDto,
+  VoiceTransportCloseDto,
+  VoiceTransportConnectDto,
+  VoiceTransportCreateDto,
+} from './dto/voice.dto';
+import { VoiceService } from './voice.service';
 
 interface SocketWithAuth extends Socket {
   data: {
@@ -72,39 +72,29 @@ export class VoiceGateway {
   async handleGetRouterRtpCapabilities(
     @MessageBody() data: GetRouterRtpCapabilitiesDto,
     @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
   ) {
-    if (typeof ack !== 'function') return;
-
     try {
       const room_Id = data.room_Id;
       await this._authorizeClient(client, room_Id);
 
       const rtpCapabilities = await this.voiceService.getRouterRtpCapabilities(room_Id);
-      ack({ rtpCapabilities });
+      return { rtpCapabilities };
     } catch (error) {
-      const errorResponse = createWsErrorResponse(error, '라우터 기능 조회 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: createWsErrorResponse(error, '라우터 기능 조회 중 오류가 발생했습니다.') };
     }
   }
-
   /**
    * WebRTC Transport 생성
    */
   @SubscribeMessage('voice:transport:create')
-  async handleCreateTransport(
-    @MessageBody() data: VoiceTransportCreateDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleCreateTransport(@MessageBody() data: VoiceTransportCreateDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       await this._authorizeClient(client, data.room_id);
       const transportInfo = await this.voiceService.createTransport(data.room_id, data.producing, client);
-      ack(transportInfo);
+      return transportInfo;
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'WebRTC Transport 생성 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -115,16 +105,14 @@ export class VoiceGateway {
   async handleConnectTransport(
     @MessageBody() data: VoiceTransportConnectDto,
     @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
   ) {
-    if (typeof ack !== 'function') return;
     try {
       await this._authorizeClient(client, data.room_id);
       const result = await this.voiceService.connectTransport(data);
-      ack(result);
+      return result;
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'WebRTC Transport 연결 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -132,26 +120,21 @@ export class VoiceGateway {
    * Producer 생성
    */
   @SubscribeMessage('voice:producer:create')
-  async handleCreateProducer(
-    @MessageBody() data: CreateProducerDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleCreateProducer(@MessageBody() data: CreateProducerDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       const producer = await this.voiceService.createProducer(data, userId);
-
-      ack({ producer_id: producer.id });
 
       // 다른 참여자들에게 새 producer 생성 알림
       client.to(data.room_id).emit('voice:producer:new', {
         producerUserId: userId,
         producerId: producer.id,
       });
+
+      return { producer_id: producer.id };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Producer 생성 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -159,19 +142,14 @@ export class VoiceGateway {
    * 방의 모든 Producer 목록 조회
    */
   @SubscribeMessage('voice:room:producers')
-  async handleGetProducers(
-    @MessageBody() data: GetProducersDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleGetProducers(@MessageBody() data: GetProducersDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       await this._authorizeClient(client, data.room_id);
       const producers = await this.voiceService.getProducersForRoom(data.room_id);
-      ack({ producers });
+      return { producers };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, '방의 Producer 목록 조회 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -179,26 +157,20 @@ export class VoiceGateway {
    * Producer 일시 중지
    */
   @SubscribeMessage('voice:producer:pause')
-  async handlePauseProducer(
-    @MessageBody() data: ProducerStateChangeDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handlePauseProducer(@MessageBody() data: ProducerStateChangeDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.pauseProducer(data.producer_id, userId);
-
-      ack({ success: true });
 
       // 다른 참여자들에게 상태 변경 알림
       client.to(data.room_id).emit('voice:producer:update', {
         user_id: userId,
         is_mic_on: 'false',
       });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Producer 일시 중지 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -206,26 +178,20 @@ export class VoiceGateway {
    * Producer 재개
    */
   @SubscribeMessage('voice:producer:resume')
-  async handleResumeProducer(
-    @MessageBody() data: ProducerStateChangeDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleResumeProducer(@MessageBody() data: ProducerStateChangeDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.resumeProducer(data.producer_id, userId);
-
-      ack({ success: true });
 
       // 다른 참여자들에게 상태 변경 알림
       client.to(data.room_id).emit('voice:producer:update', {
         user_id: userId,
         is_mic_on: 'true',
       });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Producer 재개 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -233,25 +199,19 @@ export class VoiceGateway {
    * Producer 종료
    */
   @SubscribeMessage('voice:producer:close')
-  async handleCloseProducer(
-    @MessageBody() data: ProducerStateChangeDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleCloseProducer(@MessageBody() data: ProducerStateChangeDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.closeProducer(data.producer_id, userId);
-
-      ack({ success: true });
 
       // 다른 참여자들에게 producer 종료 알림
       client.to(data.room_id).emit('voice:producer:closed', {
         user_id: userId,
       });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Producer 종료 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -259,12 +219,7 @@ export class VoiceGateway {
    * Consumer 생성
    */
   @SubscribeMessage('voice:consumer:create')
-  async handleCreateConsumer(
-    @MessageBody() data: CreateConsumerDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleCreateConsumer(@MessageBody() data: CreateConsumerDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const transportData = await this.voiceService.getTransportMetadata(data.transport_id);
       if (!transportData?.room_id) {
@@ -280,10 +235,10 @@ export class VoiceGateway {
 
       const consumerInfo = await this.voiceService.createConsumer(data, userId);
 
-      ack(consumerInfo);
+      return consumerInfo;
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Consumer 생성 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -291,20 +246,15 @@ export class VoiceGateway {
    * Consumer 일시 중지
    */
   @SubscribeMessage('voice:consumer:pause')
-  async handlePauseConsumer(
-    @MessageBody() data: ConsumerStateChangeDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handlePauseConsumer(@MessageBody() data: ConsumerStateChangeDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.pauseConsumer(data.consumer_id, userId);
 
-      ack({ success: true });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Consumer 일시 중지 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -312,20 +262,15 @@ export class VoiceGateway {
    * Consumer 재개
    */
   @SubscribeMessage('voice:consumer:resume')
-  async handleResumeConsumer(
-    @MessageBody() data: ConsumerStateChangeDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleResumeConsumer(@MessageBody() data: ConsumerStateChangeDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.resumeConsumer(data.consumer_id, userId);
 
-      ack({ success: true });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Consumer 재개 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -333,20 +278,15 @@ export class VoiceGateway {
    * Consumer 종료
    */
   @SubscribeMessage('voice:consumer:close')
-  async handleCloseConsumer(
-    @MessageBody() data: ConsumerStateChangeDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleCloseConsumer(@MessageBody() data: ConsumerStateChangeDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.closeConsumer(data.consumer_id, userId);
 
-      ack({ success: true });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'Consumer 종료 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -354,20 +294,15 @@ export class VoiceGateway {
    * 음성 채팅방 나가기
    */
   @SubscribeMessage('voice:room:leave')
-  async handleLeaveVoiceRoom(
-    @MessageBody() data: LeaveVoiceRoomDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleLeaveVoiceRoom(@MessageBody() data: LeaveVoiceRoomDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       const userId = await this._authorizeClient(client, data.room_id);
       await this.voiceService.leaveRoom(userId, data.room_id);
 
-      ack({ success: true });
+      return { success: true };
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, '음성 채팅방 나가기 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 
@@ -377,19 +312,14 @@ export class VoiceGateway {
    * @param client Socket
    */
   @SubscribeMessage('voice:transport:close')
-  async handleCloseTransport(
-    @MessageBody() data: VoiceTransportCloseDto,
-    @ConnectedSocket() client: SocketWithAuth,
-    ack: (response: unknown) => void,
-  ) {
-    if (typeof ack !== 'function') return;
+  async handleCloseTransport(@MessageBody() data: VoiceTransportCloseDto, @ConnectedSocket() client: SocketWithAuth) {
     try {
       await this._authorizeClient(client, data.room_id);
       const result = await this.voiceService.closeTransport(data);
-      ack(result);
+      return result;
     } catch (error) {
       const errorResponse = createWsErrorResponse(error, 'WebRTC Transport 종료 중 오류가 발생했습니다.');
-      ack({ error: errorResponse });
+      return { error: errorResponse };
     }
   }
 }

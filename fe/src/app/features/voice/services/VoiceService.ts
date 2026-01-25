@@ -45,13 +45,18 @@ export class VoiceService {
    */
   static async joinVoiceChannel(roomId: string) {
     this.init();
-    this.roomId = roomId;
+
+    const formattedRoomId = String(roomId);
+    this.roomId = formattedRoomId;
 
     try {
+      console.log(`[Voice] 음성 채널 입장 시도: ${formattedRoomId}`);
       // (1) Router Capabilities 조회
-      const routerCaps = await WebSocketService.request('voice:router:capabilities', {
-        room_id: roomId,
+      const response = await WebSocketService.request('voice:router:capabilities', {
+        room_Id: formattedRoomId,
       });
+
+      const routerCaps = response.rtpCapabilities;
 
       // (2) WebRTC 디바이스 초기화 (코덱 맞추기)
       await this.webRtc.initDevice(routerCaps);
@@ -106,7 +111,7 @@ export class VoiceService {
             kind,
             rtp_parameters: rtpParameters,
           });
-          callback({ id: data.id });
+          callback({ id: data.producer_id });
         } catch (err: any) {
           errback(err);
         }
@@ -180,6 +185,9 @@ export class VoiceService {
         appData: { userId: remoteUserId }, //유저 구분 용
       });
 
+      console.log(
+        `[Voice] 소리 수신 준비 완료: 유저 ${remoteUserId}, 프로듀서 ${remoteProducerId}`,
+      );
       this.consumers.set(remoteProducerId, consumer);
 
       // 명세에 따라 수신 재개 요청
@@ -197,11 +205,15 @@ export class VoiceService {
    * 5. 마이크 상태 제어 (Pause/Resume)
    */
   static async toggleMic(pause: boolean) {
+    console.log('[Debug] 현재 Producer 객체:', this.myProducer);
+    console.log('[Debug] 보낼 producer_id:', this.myProducer?.id);
     if (!this.myProducer) return;
 
     const event = pause ? 'voice:producer:pause' : 'voice:producer:resume';
-    await WebSocketService.request(event, { producer_id: this.myProducer.id });
-
+    await WebSocketService.request(event, {
+      room_id: this.roomId,
+      producer_id: this.myProducer.id,
+    });
     if (pause) this.myProducer.pause();
     else this.myProducer.resume();
   }
